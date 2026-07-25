@@ -510,6 +510,7 @@ pub fn render_systemd_unit(exe: &str, state_dir: Option<&str>) -> String {
          Environment=TUNNET_STATE_DIR={dir}\n\
          Environment=TUNNET_RUNTIME_DIR=/run/tunnet\n\
          Environment=TUNNET_SERVICE_MODE=1\n\
+         Environment=TUNNET_IPC_GROUP=tunnet\n\
          \n\
          [Install]\n\
          WantedBy=multi-user.target\n"
@@ -519,6 +520,11 @@ pub fn render_systemd_unit(exe: &str, state_dir: Option<&str>) -> String {
 #[cfg(target_os = "linux")]
 fn install_systemd(exe: &str, state_dir: Option<&str>) -> anyhow::Result<()> {
     use anyhow::Context;
+    // CLI talks to the root agent over a unix socket; members of this group
+    // get connect access (mode 0660). Missing group falls back to 0666 with a warn.
+    let _ = std::process::Command::new("groupadd")
+        .args(["--system", "tunnet"])
+        .status();
     let unit = render_systemd_unit(exe, state_dir);
     let path = std::path::Path::new("/etc/systemd/system/tunnet.service");
     std::fs::write(path, unit).with_context(|| format!("write {}", path.display()))?;
@@ -606,6 +612,7 @@ mod tests {
         assert!(unit.contains("RuntimeDirectory=tunnet"));
         assert!(unit.contains("TUNNET_RUNTIME_DIR=/run/tunnet"));
         assert!(unit.contains("TUNNET_SERVICE_MODE=1"));
+        assert!(unit.contains("TUNNET_IPC_GROUP=tunnet"));
     }
 
     #[test]

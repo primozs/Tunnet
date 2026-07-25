@@ -7924,6 +7924,7 @@ dependencies = [
  "rusqlite",
  "russh",
  "russh-sftp",
+ "rustls",
  "self_update",
  "serde",
  "serde_json",

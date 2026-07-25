@@ -42,6 +42,7 @@ metrics-exporter-prometheus.workspace = true
 ipnet.workspace = true
 sha2.workspace = true
 reqwest.workspace = true
+rustls.workspace = true
 
 iroh.workspace = true
 iroh-gossip.workspace = true

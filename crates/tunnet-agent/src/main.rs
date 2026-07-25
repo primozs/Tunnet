@@ -39,6 +39,11 @@ mod wintun_path;
 use clap::Parser;
 
 fn main() {
+    // iroh/hickory pull rustls with both ring and aws-lc-rs; pin one before any TLS.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("install rustls CryptoProvider");
+
     #[cfg(windows)]
     if std::env::args().any(|a| a == "--service") {
         if let Err(e) = crate::win_service::run_as_service() {

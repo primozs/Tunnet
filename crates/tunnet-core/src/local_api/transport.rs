@@ -73,6 +73,76 @@ fn unix_bind_path() -> PathBuf {
     PathBuf::from("/tmp/tunnetd.sock")
 }
 
+
+/// Make the agent Local API socket usable by an unprivileged CLI without world-write.
+///
+/// Prefer `root:<group>` mode `0660` (default group `tunnet`, override with
+/// `TUNNET_IPC_GROUP`). Falls back to world-writable only when the group is
+/// missing — that is intentionally noisy in logs because any local user can then
+/// drive serve/tunnel/route/dataplane via the Local API.
+#[cfg(unix)]
+fn apply_api_socket_permissions(path: &Path) {
+    use std::ffi::CString;
+    use std::os::unix::fs::PermissionsExt;
+
+    let group_name = std::env::var("TUNNET_IPC_GROUP").unwrap_or_else(|_| "tunnet".into());
+    let c_name = match CString::new(group_name.as_str()) {
+        Ok(s) => s,
+        Err(_) => {
+            tracing::warn!("invalid TUNNET_IPC_GROUP; leaving socket permissions unchanged");
+            return;
+        }
+    };
+
+    // libc getgrnam is not thread-safe; agent bind is single-threaded at startup.
+    let gid = unsafe {
+        let gr = libc::getgrnam(c_name.as_ptr());
+        if gr.is_null() {
+            None
+        } else {
+            Some((*gr).gr_gid)
+        }
+    };
+
+    if let Some(gid) = gid {
+        let c_path = match CString::new({
+            use std::os::unix::ffi::OsStrExt;
+            path.as_os_str().as_bytes()
+        }) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let rc = unsafe { libc::chown(c_path.as_ptr(), 0, gid) };
+        if rc != 0 {
+            tracing::warn!(
+                path = %path.display(),
+                group = %group_name,
+                "failed to chown Local API socket to root:{group_name}"
+            );
+        }
+        if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660)) {
+            tracing::warn!(path = %path.display(), error = %e, "failed to chmod Local API socket 0660");
+        } else {
+            tracing::info!(
+                path = %path.display(),
+                group = %group_name,
+                "Local API socket mode 0660 root:{group_name}"
+            );
+        }
+        return;
+    }
+
+    tracing::warn!(
+        group = %group_name,
+        "group missing — Local API socket will be world-writable (0666). \
+         Create it with `sudo groupadd {group_name}` and add yourself with \
+         `sudo usermod -aG {group_name} $USER` (re-login), or set TUNNET_IPC_GROUP."
+    );
+    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666)) {
+        tracing::warn!(path = %path.display(), error = %e, "failed to chmod Local API socket 0666");
+    }
+}
+
 #[cfg(windows)]
 fn system_api_marker_path() -> PathBuf {
     let base = std::env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".into());
@@ -119,8 +189,6 @@ impl ApiListener {
         let path = default_api_path();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-
             if path.exists() {
                 let _ = std::fs::remove_file(&path);
             }
@@ -128,7 +196,7 @@ impl ApiListener {
                 std::fs::create_dir_all(parent)?;
             }
             let unix = tokio::net::UnixListener::bind(&path)?;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666));
+            apply_api_socket_permissions(&path);
             tracing::info!(path = %path.display(), "Local API listening (unix)");
             Ok((
                 Self {

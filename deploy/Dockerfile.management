@@ -8,8 +8,10 @@ COPY package.json bun.lock ./
 COPY packages/db/package.json packages/db/
 COPY packages/api/package.json packages/api/
 COPY packages/ip/package.json packages/ip/
-COPY packages/core/package.json packages/core/
 COPY packages/env/package.json packages/env/
+COPY packages/entitlements/package.json packages/entitlements/
+COPY packages/policy-engine/package.json packages/policy-engine/
+COPY packages/tunnet/package.json packages/tunnet/
 COPY apps/management/package.json apps/management/
 COPY apps/dashboard/package.json apps/dashboard/
 COPY crates/tunnet-node-napi/package.json crates/tunnet-node-napi/

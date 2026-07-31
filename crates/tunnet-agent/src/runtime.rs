@@ -32,10 +32,6 @@ pub async fn run(
     let metrics = AgentMetrics::new().context("metrics")?;
     let started_at = Instant::now();
 
-    let hostname = std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "tunnet-agent".into());
-
     let ssh_sessions = crate::ssh::SshSessionRegistry::default();
     let on_kill_ssh = {
         let sessions = ssh_sessions.clone();
@@ -65,6 +61,8 @@ pub async fn run(
     let src_posture_ok = posture_runtime.as_ref().map(|p| p.src_posture_ok());
 
     let agent_cfg = tunnet_core::TunnetConfig::load(&paths).unwrap_or_default();
+    let hostname = tunnet_core::resolve_runtime_hostname(&agent_cfg.configured_hostname(&persisted));
+    tracing::info!(%hostname, "agent hostname");
     let config_store = tunnet_core::EffectiveConfigStore::new();
     let _ = config_store.recompute(&agent_cfg, Default::default());
 

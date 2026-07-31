@@ -177,8 +177,12 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
             anyhow::bail!("starting the system service needs root: sudo tunnet service start");
         }
         println!("Starting tunnet service…");
+        // Rewriting the unit (e.g. ExecStart tunnet → tunnetd) while an old
+        // process is still "active" makes `systemctl start` a no-op — then we
+        // hang waiting for a Local API socket the old binary never binds.
         install_inner(state_dir, false)?;
-        run_cmd("systemctl", &["start", SERVICE_NAME])?;
+        run_cmd("systemctl", &["daemon-reload"])?;
+        run_cmd("systemctl", &["restart", SERVICE_NAME])?;
         let _ = run_cmd("systemctl", &["enable", SERVICE_NAME]);
         wait_for_local_api(std::time::Duration::from_secs(60))?;
         println!("Service is running.");
@@ -497,7 +501,7 @@ pub fn render_systemd_unit(exe: &str, state_dir: Option<&str>) -> String {
          Wants=network-online.target\n\
          \n\
          [Service]\n\
-         Type=notify-reload\n\
+         Type=notify\n\
          ExecStart={exe}\n\
          ExecReload=/bin/kill -HUP $MAINPID\n\
          Restart=always\n\
@@ -524,6 +528,8 @@ fn install_systemd(exe: &str, state_dir: Option<&str>) -> anyhow::Result<()> {
     // get connect access (mode 0660). Missing group falls back to 0666 with a warn.
     let _ = std::process::Command::new("groupadd")
         .args(["--system", "tunnet"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status();
     let unit = render_systemd_unit(exe, state_dir);
     let path = std::path::Path::new("/etc/systemd/system/tunnet.service");
@@ -604,7 +610,8 @@ mod tests {
         assert!(unit.contains("After=network-online.target"));
         assert!(unit.contains("ExecStart=/usr/bin/tunnetd"));
         assert!(!unit.contains(" run"));
-        assert!(unit.contains("Type=notify-reload"));
+        assert!(unit.contains("Type=notify"));
+        assert!(!unit.contains("Type=notify-reload"));
         assert!(unit.contains("TimeoutStartSec=30"));
         assert!(unit.contains("ExecReload=/bin/kill -HUP $MAINPID"));
         assert!(unit.contains("TUNNET_STATE_DIR=/var/lib/tunnet"));

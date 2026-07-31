@@ -160,10 +160,16 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
         network_id: resp.network_id,
         organization_id: resp.organization_id,
         enrolled_at: chrono::Utc::now(),
+        hostname: hostname.clone(),
     });
     let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
     let tier = persist_agent(&paths, &identity, persisted, policy)?;
     tunnet_core::state::save_snapshot_cache(&paths, &resp.snapshot)?;
+    {
+        let mut cfg = tunnet_core::TunnetConfig::ensure(&paths)?;
+        cfg.node.hostname = hostname.clone();
+        cfg.save(&paths)?;
+    }
 
     println!(
         "Enrolled. endpoint_id={} ip={} network={} (secrets: {})",

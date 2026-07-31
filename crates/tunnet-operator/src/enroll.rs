@@ -69,6 +69,7 @@ pub async fn enroll_node(
         network_id: response.network_id,
         organization_id: response.organization_id.clone(),
         enrolled_at: Utc::now(),
+        hostname: hostname.to_string(),
     });
 
     Ok(EnrolledNode {

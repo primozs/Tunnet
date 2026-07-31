@@ -36,7 +36,7 @@ pub mod tunnel;
 #[cfg(feature = "managed")]
 pub mod ws_client;
 
-pub use agent_config::{TunnetConfig, load_dns, load_firewall};
+pub use agent_config::{TunnetConfig, load_dns, load_firewall, resolve_runtime_hostname};
 pub use effective_config::{EffectiveAgentConfigState, EffectiveConfigStore};
 pub use secret_store::{
     AgentSecrets, NetworkSecrets, SealPolicy, SealTier, load_agent, persist_agent,

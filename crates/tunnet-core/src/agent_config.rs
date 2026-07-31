@@ -320,9 +320,29 @@ impl TunnetConfig {
                     );
                 }
             }
-            PersistedState::Managed(_) => {}
+            PersistedState::Managed(m) => {
+                cfg.node.hostname = m.hostname.clone();
+            }
         }
         Ok(cfg)
+    }
+
+    /// Hostname to advertise at runtime: `tunnet.toml` → persisted state → OS env.
+    pub fn configured_hostname(&self, persisted: &PersistedState) -> String {
+        if !self.node.hostname.trim().is_empty() {
+            return self.node.hostname.trim().to_string();
+        }
+        match persisted {
+            PersistedState::Managed(m) if !m.hostname.trim().is_empty() => {
+                m.hostname.trim().to_string()
+            }
+            PersistedState::Direct { networks } => networks
+                .first()
+                .map(|d| d.hostname.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_default(),
+            _ => String::new(),
+        }
     }
 
     /// Upsert Direct network section (create/join). Secrets live in `state.enc`.
@@ -748,9 +768,48 @@ pub fn save_connect_allowlist(
     cfg.save(paths)
 }
 
+/// Prefer an explicit mesh hostname (from enroll/`tunnet.toml`), then OS env, then a default.
+///
+/// Enroll stores the chosen name in `node.hostname` / managed state; the agent must not
+/// re-advertise `HOSTNAME` on every restart or `--hostname` is lost after service reload.
+pub fn resolve_runtime_hostname(configured: &str) -> String {
+    let configured = configured.trim();
+    if !configured.is_empty() {
+        return configured.to_string();
+    }
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "tunnet-agent".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_runtime_hostname_prefers_configured_over_env() {
+        // Safety: tests in this crate shouldn't rely on mutating process env concurrently.
+        // We only assert the configured branch, which does not read env.
+        assert_eq!(resolve_runtime_hostname("x1"), "x1");
+        assert_eq!(resolve_runtime_hostname("  x1  "), "x1");
+    }
+
+    #[test]
+    fn resolve_runtime_hostname_falls_back_when_configured_empty() {
+        let got = resolve_runtime_hostname("");
+        let from_env = std::env::var("HOSTNAME")
+            .or_else(|_| std::env::var("COMPUTERNAME"))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        match from_env {
+            Some(h) => assert_eq!(got, h),
+            None => assert_eq!(got, "tunnet-agent"),
+        }
+    }
 
     #[test]
     fn validate_ok_minimal() {

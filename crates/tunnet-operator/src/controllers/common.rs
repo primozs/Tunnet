@@ -234,6 +234,7 @@ pub async fn reconcile_node_workload(
                     network_id: existing.network_id,
                     organization_id: existing.organization_id.clone(),
                     enrolled_at: Utc::now(),
+                    hostname: existing.hostname.clone(),
                 });
                 resources::upsert_node_secret(
                     ctx,

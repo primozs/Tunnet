@@ -351,9 +351,13 @@ fn offline_status(_paths: &StatePaths, persisted: &PersistedState) -> OfflineSta
             }
         }
         PersistedState::Managed(m) => {
-            let hostname = std::env::var("HOSTNAME")
-                .or_else(|_| std::env::var("COMPUTERNAME"))
-                .unwrap_or_else(|_| "-".into());
+            let hostname = if !m.hostname.is_empty() {
+                m.hostname.clone()
+            } else {
+                std::env::var("HOSTNAME")
+                    .or_else(|_| std::env::var("COMPUTERNAME"))
+                    .unwrap_or_else(|_| "-".into())
+            };
             OfflineStatus {
                 hostname,
                 ip: "-".into(),

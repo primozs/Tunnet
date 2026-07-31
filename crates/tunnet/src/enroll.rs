@@ -144,10 +144,16 @@ pub async fn enroll(cfg: EnrollConfig) -> Result<EnrollResult> {
         network_id: resp.network_id,
         organization_id: resp.organization_id.clone(),
         enrolled_at: chrono::Utc::now(),
+        hostname: hostname.clone(),
     });
     let policy = tunnet_core::SealPolicy::from_env_and_flag(false);
     tunnet_core::persist_agent(&paths, &identity, persisted, policy).map_err(Error::enrollment)?;
     tunnet_core::state::save_snapshot_cache(&paths, &resp.snapshot).map_err(Error::enrollment)?;
+    {
+        let mut agent_cfg = tunnet_core::TunnetConfig::ensure(&paths).map_err(Error::enrollment)?;
+        agent_cfg.node.hostname = hostname;
+        agent_cfg.save(&paths).map_err(Error::enrollment)?;
+    }
 
     Ok(EnrollResult {
         endpoint_id: identity.endpoint_id_hex(),

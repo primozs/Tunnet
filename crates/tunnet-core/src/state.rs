@@ -141,6 +141,9 @@ pub struct ManagedState {
     pub network_id: Uuid,
     pub organization_id: String,
     pub enrolled_at: DateTime<Utc>,
+    /// Mesh hostname chosen at enroll (`--hostname` / `TUNNET_HOSTNAME`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hostname: String,
 }
 
 /// Direct-mode P2P network state (no control plane).
@@ -443,11 +446,33 @@ mod tests {
             network_id: Uuid::nil(),
             organization_id: "org".into(),
             enrolled_at: Utc::now(),
+            hostname: "x1".into(),
         });
         let bytes = serde_json::to_vec(&s).unwrap();
         let loaded: PersistedState = serde_json::from_slice(&bytes).unwrap();
         assert!(loaded.is_managed());
         assert_eq!(loaded.primary_network_name(), Some("default"));
+        match loaded {
+            PersistedState::Managed(m) => assert_eq!(m.hostname, "x1"),
+            _ => panic!("expected managed"),
+        }
+    }
+
+    #[test]
+    fn managed_hostname_defaults_when_missing() {
+        let raw = r#"{
+            "mode":"managed",
+            "control_url":"http://localhost:8080",
+            "network_name":"default",
+            "network_id":"00000000-0000-0000-0000-000000000000",
+            "organization_id":"org",
+            "enrolled_at":"2026-01-01T00:00:00Z"
+        }"#;
+        let loaded: PersistedState = serde_json::from_str(raw).unwrap();
+        match loaded {
+            PersistedState::Managed(m) => assert!(m.hostname.is_empty()),
+            _ => panic!("expected managed"),
+        }
     }
 
     #[test]

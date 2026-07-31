@@ -46,6 +46,8 @@ pub enum PersistedState {
 pub struct ManagedState {
     pub network_name: String,
     pub network_id: Uuid,
+    #[serde(default)]
+    pub hostname: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

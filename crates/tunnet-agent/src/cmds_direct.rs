@@ -690,9 +690,15 @@ pub async fn run_upgrade(args: UpgradeArgs, state_dir: Option<&str>) -> anyhow::
         network_id: resp.network_id,
         organization_id: resp.organization_id,
         enrolled_at: chrono::Utc::now(),
+        hostname: direct.hostname.clone(),
     });
     persist_agent(&paths, &identity, managed, policy)?;
     tunnet_core::state::save_snapshot_cache(&paths, &resp.snapshot)?;
+    {
+        let mut cfg = tunnet_core::TunnetConfig::ensure(&paths)?;
+        cfg.node.hostname = direct.hostname.clone();
+        cfg.save(&paths)?;
+    }
 
     let notice = serde_json::json!({
         "type": "upgrade_to_managed",

@@ -7,7 +7,7 @@
 //! Tiers (best available wins unless plaintext forced):
 //! 1. `tpm` - Windows DPAPI (TPM-backed when present); Linux falls through today
 //! 2. `keychain` - macOS System/login Keychain
-//! 3. `derived` - HKDF from machine-id + boot-id + salt (offline-copy protection)
+//! 3. `derived` - HKDF from machine-id + salt (offline-copy protection; survives reboot)
 //! 4. `plaintext` - explicit `--no-encrypt-state` / `TUNNET_NO_ENCRYPT_STATE`
 
 mod derived;

@@ -1,4 +1,9 @@
-//! Machine-bound wrap key: HKDF-SHA256(machine-id || boot-id, salt).
+//! Machine-bound wrap key: HKDF-SHA256(machine-id, salt).
+//!
+//! Intentionally excludes Linux `boot_id`: that value changes every reboot, which
+//! made sealed `state.enc` unreadable after restart (systemd agents crash-looped
+//! with `unwrap DEK failed`). Machine-id alone still resists offline copy to
+//! another host.
 
 #[cfg(any(target_os = "macos", windows))]
 use anyhow::Context;
@@ -12,16 +17,12 @@ const INFO: &[u8] = b"tunnet-state-enc-v1";
 
 pub fn derive_wrap_key(salt: &[u8]) -> anyhow::Result<[u8; 32]> {
     let machine = read_machine_id()?;
-    let boot = read_boot_id().unwrap_or_default();
-    let mut ikm = Vec::with_capacity(machine.len() + boot.len());
-    ikm.extend_from_slice(machine.as_bytes());
-    ikm.push(b'|');
-    ikm.extend_from_slice(boot.as_bytes());
+    let ikm = machine.as_bytes();
 
     // HKDF-Extract: PRK = HMAC(salt, IKM)
     let mut extract = HmacSha256::new_from_slice(if salt.is_empty() { &[0u8; 32] } else { salt })
         .map_err(|_| anyhow::anyhow!("HMAC key"))?;
-    extract.update(&ikm);
+    extract.update(ikm);
     let prk = extract.finalize().into_bytes();
 
     // HKDF-Expand: OKM = HMAC(PRK, info || 0x01)
@@ -97,15 +98,3 @@ fn read_machine_id() -> anyhow::Result<String> {
     }
 }
 
-fn read_boot_id() -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
-            .ok()
-            .map(|s| s.trim().to_string())
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        None
-    }
-}
